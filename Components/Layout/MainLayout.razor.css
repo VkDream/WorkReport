@@ -1,0 +1,114 @@
+.layout {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar {
+    height: 56px;
+    flex: none;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+.brand-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text-primary);
+}
+
+.layout-body {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+}
+
+.sidebar {
+    width: 200px;
+    flex: none;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    padding: 16px 12px;
+    position: sticky;
+    top: 56px;
+    height: calc(100vh - 56px);
+    overflow-y: auto;
+}
+
+.content {
+    flex: 1;
+    min-width: 0;
+    padding: 28px 32px;
+    background: var(--color-bg);
+    max-width: 1200px;
+}
+
+@media (max-width: 768px) {
+    .layout-body {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+        padding: 8px 12px;
+    }
+
+    .content {
+        padding: 16px;
+        max-width: none;
+    }
+}
+
+#blazor-error-ui {
+    background: #FFFBEB;
+    border-top: 1px solid var(--color-warning);
+    color: var(--color-text-primary);
+    bottom: 0;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}

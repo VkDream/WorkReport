@@ -1,0 +1,25 @@
+@if (Visible)
+{
+    <div class="modal-overlay" @onclick="OnCancel">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header-custom">
+                <h3 class="modal-title-custom">@Title</h3>
+            </div>
+            <div class="modal-body-custom">
+                <p>@Message</p>
+            </div>
+            <div class="modal-footer-custom">
+                <button class="btn btn-ghost" @onclick="OnCancel">取消</button>
+                <button class="btn btn-danger-custom" @onclick="OnConfirm">确定删除</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string Title { get; set; } = "确认操作";
+    [Parameter] public string Message { get; set; } = "确定要执行此操作吗？";
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+}

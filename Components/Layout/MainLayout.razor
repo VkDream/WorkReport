@@ -1,0 +1,27 @@
+@inherits LayoutComponentBase
+
+<div class="layout">
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark">汇</span>
+            <span class="brand-name">工作汇报</span>
+        </a>
+        <span class="badge-period" title="当前半月期">@TaskService.GetCurrentPeriod()</span>
+    </header>
+
+    <div class="layout-body">
+        <aside class="sidebar">
+            <NavMenu />
+        </aside>
+
+        <main class="content content-fade">
+            @Body
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui">
+    发生了未处理的错误。
+    <a href="" class="reload">重新加载</a>
+    <a class="dismiss">🗙</a>
+</div>

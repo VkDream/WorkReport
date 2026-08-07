@@ -1,0 +1,58 @@
+@page "/login"
+@layout Layout.LoginLayout
+@attribute [AllowAnonymous]
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>登录 - 工作汇报</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <span class="brand-mark">汇</span>
+            <span class="brand-name">工作汇报</span>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert-banner" style="margin-bottom: 16px;">
+                <span class="alert-icon">⚠️</span>
+                <span class="alert-text">@_error</span>
+            </div>
+        }
+
+        <form method="post" action="/api/login-form">
+            @* 防伪令牌 *@
+            <input type="hidden" name="returnUrl" value="@_returnUrl" />
+            <div class="mb-3">
+                <label class="form-label">用户名</label>
+                <input type="text" class="form-control" name="username"
+                       placeholder="请输入用户名" autofocus autocomplete="username" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-control" name="password"
+                       placeholder="请输入密码" autocomplete="current-password" />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">登录</button>
+        </form>
+
+        <div class="login-footer">
+            <span>还没有账号？</span>
+            <a href="/register">注册新账号</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? _error;
+    private string _returnUrl = "/";
+
+    protected override void OnInitialized()
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        _error = query.TryGetValue("error", out var errors) ? errors.FirstOrDefault() : null;
+        _returnUrl = query.TryGetValue("ReturnUrl", out var urls) ? urls.FirstOrDefault() ?? "/" : "/";
+        if (string.IsNullOrEmpty(_returnUrl) || !_returnUrl.StartsWith('/') || _returnUrl.StartsWith("//") || _returnUrl.StartsWith("/\\")) _returnUrl = "/";
+    }
+}

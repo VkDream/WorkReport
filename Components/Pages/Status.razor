@@ -1,0 +1,143 @@
+@page "/status"
+@attribute [Authorize]
+@inject SystemStatusService StatusService
+
+<h2 class="mb-4">系统状态</h2>
+
+@if (_loading)
+{
+    <div class="spinner"></div>
+}
+else if (_info is null)
+{
+    <div class="empty-state">无法获取系统状态。</div>
+}
+else
+{
+    @if (!string.IsNullOrEmpty(_info.DbReadError))
+    {
+        <div class="alert-banner" style="margin-bottom:16px">
+            <span class="alert-icon">❌</span>
+            <span class="alert-text">数据库读取失败：@_info.DbReadError</span>
+        </div>
+    }
+
+    <div class="table-responsive">
+        <table class="table system-table">
+            <tbody>
+                <tr><td class="label-col">数据库绝对路径</td><td><code>@_info.DbAbsolutePath</code></td></tr>
+                <tr>
+                    <td class="label-col">数据库文件是否存在</td>
+                    <td>@if (_info.DbExists) { <span>✅ 是</span> } else { <span>❌ 否</span> }</td>
+                </tr>
+                <tr><td class="label-col">数据库文件大小</td><td>@FormatSize(_info.DbSizeBytes)</td></tr>
+                <tr><td class="label-col">任务总数</td><td><strong>@_info.TaskCount</strong> 条</td></tr>
+                <tr><td class="label-col">用户总数</td><td><strong>@_info.UserCount</strong> 个</td></tr>
+
+                <tr><td class="label-col section-label" colspan="2">WAL / SHM 状态</td></tr>
+                <tr>
+                    <td class="label-col">WAL 文件</td>
+                    <td>
+                        @if (_info.WalExists)
+                        {
+                            var walSize = FormatSize(_info.WalSizeBytes);
+                            <span>存在，大小 @walSize</span>
+                            if (_info.WalSizeBytes > 0)
+                            {
+                                <span class="badge bg-warning text-dark ms-2" style="font-size:11px">⚠ 有未 checkpoint 的 WAL 内容，备份前会自动合并</span>
+                            }
+                        }
+                        else { <span class="text-muted">不存在</span> }
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label-col">SHM 文件</td>
+                    <td>@if (_info.ShmExists) { <span>存在，大小 @FormatSize(_info.ShmSizeBytes)</span> } else { <span class="text-muted">不存在</span> }</td>
+                </tr>
+
+                <tr><td class="label-col section-label" colspan="2">运行信息</td></tr>
+                <tr><td class="label-col">环境名称</td><td><strong>@_info.EnvironmentName</strong></td></tr>
+                <tr><td class="label-col">进程 ID</td><td><code>@_info.ProcessId</code></td></tr>
+                <tr><td class="label-col">监听地址</td><td><code>@_info.ListeningUrls</code></td></tr>
+                <tr><td class="label-col">当前登录用户</td><td><strong>@(_info.CurrentUsername ?? "—")</strong></td></tr>
+                <tr><td class="label-col">程序启动时间</td><td>@(_info.StartupTime ?? "—")</td></tr>
+
+                <tr><td class="label-col section-label" colspan="2">路径信息</td></tr>
+                <tr><td class="label-col">ContentRootPath</td><td><code>@_info.ContentRootPath</code></td></tr>
+                <tr><td class="label-col">AppContext.BaseDirectory</td><td><code>@_info.AppBaseDirectory</code></td></tr>
+
+                <tr><td class="label-col section-label" colspan="2">备份信息</td></tr>
+                <tr>
+                    <td class="label-col">最近自动备份</td>
+                    <td>
+                        @if (_info.LastBackupName is not null)
+                        {
+                            <span>@_info.LastBackupName</span>
+                            <span class="text-muted ms-2">(@_info.LastBackupTime)</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">暂无</span>
+                        }
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+}
+
+<style>
+.system-table {
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.system-table td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 14px;
+}
+.system-table .label-col {
+    width: 200px;
+    color: #64748B;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.system-table code {
+    background: #F1F5F9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #1E293B;
+}
+.system-table .section-label {
+    background: #F8FAFC;
+    font-weight: 700;
+    color: #475569;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 10px 16px;
+}
+</style>
+
+@code {
+    private bool _loading = true;
+    private SystemStatusInfo? _info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _info = await StatusService.GetSystemStatusAsync();
+        _loading = false;
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        0 => "—",
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+    };
+}

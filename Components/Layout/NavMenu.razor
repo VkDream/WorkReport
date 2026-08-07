@@ -1,0 +1,92 @@
+@inject AuthenticationStateProvider AuthState
+@inject AuthService Auth
+
+<nav class="side-nav">
+    <a class="new-task-btn" href="/task/new">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <path d="M12 5v14M5 12h14" />
+        </svg>
+        新增任务
+    </a>
+
+    <div class="nav-group-label">菜单</div>
+
+    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" />
+        </svg>
+        当前半月
+    </NavLink>
+
+    <NavLink class="nav-link" href="history">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+        </svg>
+        历史记录
+    </NavLink>
+
+    <NavLink class="nav-link" href="completed">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+        已完成汇总
+    </NavLink>
+
+    <NavLink class="nav-link" href="status">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        </svg>
+        系统状态
+    </NavLink>
+
+    <NavLink class="nav-link" href="documents">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8M16 17H8M10 9H8" />
+        </svg>
+        文档库
+    </NavLink>
+
+    <NavLink class="nav-link" href="recycle-bin">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+        回收站
+    </NavLink>
+
+    <div class="nav-spacer"></div>
+
+    @if (_username is not null)
+    {
+        <a class="nav-link" href="profile">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 0 0-16 0" />
+            </svg>
+            @_displayName
+        </a>
+    }
+
+    <a class="nav-logout" href="/api/logout">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3" />
+        </svg>
+        退出登录
+    </a>
+</nav>
+
+@code {
+    private string? _username;
+    private string? _displayName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        _username = state.User.Identity?.Name;
+        _displayName = _username;
+        if (_username is not null)
+        {
+            var user = await Auth.GetUserAsync(_username);
+            if (!string.IsNullOrWhiteSpace(user?.DisplayName))
+                _displayName = user.DisplayName;
+        }
+    }
+}

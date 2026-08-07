@@ -1,0 +1,119 @@
+.side-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.new-task-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 38px;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    margin-bottom: 16px;
+    transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+    box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
+}
+
+.new-task-btn:hover {
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.nav-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 0 10px;
+    margin-bottom: 8px;
+    margin-top: 2px;
+}
+
+.side-nav ::deep .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.side-nav ::deep .nav-link:hover {
+    background: var(--color-bg);
+    color: var(--color-text-primary);
+}
+
+.side-nav ::deep .nav-link.active {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .side-nav {
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .new-task-btn {
+        margin-bottom: 0;
+        padding: 0 12px;
+        order: 99;
+        margin-left: auto;
+    }
+
+    .nav-group-label {
+        display: none;
+    }
+}
+
+.nav-spacer {
+    flex: 1;
+    min-height: 8px;
+}
+
+.nav-logout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 10px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-logout:hover {
+    background: #FEF2F2;
+    color: var(--color-danger);
+}
+
+.nav-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    margin-bottom: 2px;
+}

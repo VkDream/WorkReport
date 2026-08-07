@@ -1,0 +1,52 @@
+@page "/register"
+@layout Layout.LoginLayout
+@attribute [AllowAnonymous]
+@inject NavigationManager Nav
+
+<PageTitle>注册 - 工作汇报</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <span class="brand-mark">汇</span>
+            <span class="brand-name">工作汇报</span>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert-banner" style="margin-bottom: 16px;">
+                <span class="alert-icon">⚠️</span>
+                <span class="alert-text">@_error</span>
+            </div>
+        }
+
+        <form method="post" action="/api/register-form">
+            <div class="mb-3">
+                <label class="form-label">用户名</label>
+                <input type="text" class="form-control" name="username"
+                       placeholder="至少 2 个字符" autofocus autocomplete="username" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-control" name="password"
+                       placeholder="至少 4 个字符" autocomplete="new-password" />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">注册并登录</button>
+        </form>
+
+        <div class="login-footer">
+            <span>已有账号？</span>
+            <a href="/login">返回登录</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        _error = query.TryGetValue("error", out var errors) ? errors.FirstOrDefault() : null;
+    }
+}

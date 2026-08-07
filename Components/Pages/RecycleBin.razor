@@ -1,0 +1,103 @@
+@page "/recycle-bin"
+@attribute [Authorize]
+@inject TaskService TaskService
+@inject NavigationManager Nav
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">回收站</h1>
+        <p class="page-subtitle">已删除任务可恢复，也可以彻底删除</p>
+    </div>
+    @if (!_loading && _tasks.Count > 0)
+    {
+        <div class="page-actions">
+            <form method="post" action="/api/tasks/hard-delete-all-form" data-enhance="false"
+                  onsubmit="return confirm('确定彻底删除回收站里的全部任务吗？此操作不可恢复。')">
+                <button type="submit" class="btn btn-ghost text-nowrap">清空回收站</button>
+            </form>
+        </div>
+    }
+</div>
+
+@if (_loading)
+{
+    <div class="spinner"></div>
+}
+else if (_tasks.Count == 0)
+{
+    <div class="empty-state" style="background:white;border-radius:10px;margin-top:12px">回收站为空</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table system-table">
+            <thead>
+                <tr>
+                    <th style="width:130px">半月期</th>
+                    <th style="width:80px">类型</th>
+                    <th>工作说明</th>
+                    <th style="width:90px">完成效果</th>
+                    <th style="width:130px">删除时间</th>
+                    <th style="width:140px">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in _tasks)
+                {
+                    <tr>
+                        <td class="text-muted small">@t.Period</td>
+                        <td>@t.Type</td>
+                        <td>@t.Title</td>
+                        <td><ResultBadge Result="@t.Result" /></td>
+                        <td class="text-muted small">@(t.DeletedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                        <td>
+                            <form method="post" action="/api/tasks/restore-form" style="display:inline" data-enhance="false">
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button type="submit" class="btn-text btn-text-edit">恢复</button>
+                            </form>
+                            <form method="post" action="/api/tasks/hard-delete-form" style="display:inline" data-enhance="false" onsubmit="return confirm('彻底删除后不可恢复，确定吗？')">
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button type="submit" class="btn-text btn-text-danger">彻底删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<style>
+.system-table thead th {
+    background: #F1F5F9;
+    color: #475569;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 12px;
+    border-bottom: 2px solid #3B82F6;
+}
+.system-table td {
+    padding: 10px 12px;
+    vertical-align: middle;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 14px;
+}
+.system-table {
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.system-table tbody tr:hover { background: #F8FAFC; }
+</style>
+
+@code {
+    private bool _loading = true;
+    private List<WorkTask> _tasks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tasks = await TaskService.GetDeletedTasksAsync();
+        _loading = false;
+    }
+}

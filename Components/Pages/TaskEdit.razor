@@ -1,0 +1,313 @@
+@page "/task/new"
+@page "/task/edit/{Id:int}"
+@attribute [Authorize]
+@inject TaskService TaskService
+@inject NavigationManager Nav
+@inject DocumentService DocumentService
+@inject IJSRuntime JS
+
+<PageTitle>@_pageTitle</PageTitle>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert-banner">
+        <span class="alert-icon">⚠️</span>
+        <span class="alert-text">@_error</span>
+        <button class="alert-dismiss" @onclick="() => _error = null">✕</button>
+    </div>
+}
+
+<div class="page-header">
+    <div>
+        <a class="back-link" href="/">← 返回列表</a>
+        <h1 class="page-title">@_pageTitle</h1>
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert-banner">
+        <span class="alert-icon">⚠️</span>
+        <span class="alert-text">@_error</span>
+        <button class="alert-dismiss" @onclick="() => _error = null">✕</button>
+    </div>
+}
+@if (_task is null)
+{
+    <div class="loading-state">
+        <div class="spinner"></div>
+        <span>@(_notFound ? "任务不存在。" : "加载中...")</span>
+    </div>
+}
+else
+{
+    <section class="card-panel" style="max-width: 640px">
+        <div class="card-panel-body">
+            <EditForm Model="_task" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label class="form-label">所属半月期</label>
+                        <InputText class="form-control" @bind-Value="_task.Period" placeholder="例如 2026-06-01~06-15" />
+                        <ValidationMessage For="() => _task.Period" />
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label d-block">类型</label>
+                        <div class="segmented" role="group" aria-label="任务类型">
+                            @foreach (var type in TaskTypes.All)
+                            {
+                                <button type="button" class="@(_task.Type == type ? "active" : null)"
+                                        @onclick="() => _task.Type = type">@type</button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">工作说明</label>
+                        <InputTextArea class="form-control" rows="3" @bind-Value="_task.Title" placeholder="这半个月做了什么？" />
+                        <ValidationMessage For="() => _task.Title" />
+                    </div>
+
+                    <div class="col-sm-6">
+                        <label class="form-label">完成效果</label>
+                        <InputSelect class="form-select" @bind-Value="_task.Result">
+                            <option value="">（空）</option>
+                            @foreach (var result in TaskResults.All)
+                            {
+                                <option value="@result">@result</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">解决时间</label>
+                        <InputText class="form-control" @bind-Value="_task.ResolveDate" placeholder="例如 2026-06-10" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">备注说明</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="_task.Note" />
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <a class="btn btn-ghost" href="/">取消</a>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+
+    @if (!IsNew && _task is not null)
+    {
+        <section class="card-panel" style="max-width: 640px">
+            <div class="card-panel-header">
+                <h2 class="card-panel-title">关联文档</h2>
+            </div>
+            <div class="card-panel-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-sm-5">
+                        <input class="form-control form-control-sm" placeholder="标题" @bind="_docTitle" />
+                    </div>
+                    <div class="col-sm-3">
+                        <input class="form-control form-control-sm" placeholder="分类" @bind="_docCategory" />
+                    </div>
+                    <div class="col-sm-4">
+                        <input class="form-control form-control-sm" placeholder="备注（可选）" @bind="_docNote" />
+                    </div>
+                    <div class="col-sm-8">
+                        <InputFile class="form-control form-control-sm" OnChange="OnDocSelected" />
+                    </div>
+                    <div class="col-sm-4">
+                        <button class="btn btn-outline-primary btn-sm w-100" @onclick="UploadDocAsync" disabled="@_uploadingDoc">
+                            @(_uploadingDoc ? "上传中..." : "上传附件")
+                        </button>
+                    </div>
+                </div>
+
+                @if (_attachments.Count > 0)
+                {
+                    <table class="table-modern" style="font-size:13px">
+                        <thead>
+                            <tr>
+                                <th>标题</th>
+                                <th>文件名</th>
+                                <th style="width:5rem">大小</th>
+                                <th style="width:8rem">时间</th>
+                                <th style="width:7rem">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var doc in _attachments)
+                            {
+                                <tr>
+                                    <td>@doc.Title</td>
+                                    <td class="col-secondary">@doc.OriginalFileName</td>
+                                    <td class="col-secondary">@DocumentService.FormatFileSize(doc.FileSize)</td>
+                                    <td class="col-secondary small">@doc.CreatedAt.ToString("MM-dd HH:mm")</td>
+                                    <td>
+                                        @if (DocumentService.CanOpenInBrowser(doc.OriginalFileName, doc.ContentType))
+                                        {
+                                            <a class="btn-text btn-text-edit" href="/api/documents/open/@doc.Id" target="_blank" rel="noopener" data-enhance-nav="false">打开</a>
+                                        }
+                                        <a class="btn-text btn-text-copy" href="/api/documents/download/@doc.Id" data-enhance-nav="false">下载</a>
+                                        <button class="btn-text btn-text-danger" @onclick="() => DeleteDocAsync(doc.Id)">删除</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="text-muted small">暂无附件</div>
+                }
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Period { get; set; }
+
+    private WorkTask? _task;
+    private bool _notFound;
+    private string? _error;
+    private List<DocumentListItem> _attachments = [];
+    private string _docTitle = "";
+    private string _docCategory = "任务附件";
+    private string? _docNote;
+    private IBrowserFile? _docFile;
+    private bool _uploadingDoc;
+
+    private bool IsNew => Id is null;
+    private string _pageTitle => IsNew ? "新增任务" : "编辑任务";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _error = null;
+            if (IsNew)
+            {
+                var uri = new Uri(Nav.Uri);
+                var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                var copyStr = query["copy"];
+                if (int.TryParse(copyStr, out var copyId) && copyId > 0)
+                {
+                    var source = await TaskService.GetTaskAsync(copyId);
+                    if (source is not null)
+                    {
+                        _task = new WorkTask
+                        {
+                            Period = Period ?? TaskService.GetCurrentPeriod(),
+                            Type = source.Type,
+                            Title = source.Title,
+                            Result = source.Result,
+                            ResolveDate = source.ResolveDate,
+                            Note = source.Note,
+                        };
+                        return;
+                    }
+                }
+                _task = new WorkTask { Period = Period ?? TaskService.GetCurrentPeriod() };
+            }
+            else
+            {
+                _task = await TaskService.GetTaskAsync(Id!.Value);
+                _notFound = _task is null;
+                if (_task is not null)
+                    _attachments = await DocumentService.GetByTaskAsync(Id!.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"加载任务失败：{ex.Message}";
+            _task = null;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        // 空白的可选字段统一存 null
+        _task!.Result = string.IsNullOrWhiteSpace(_task.Result) ? null : _task.Result.Trim();
+        _task.ResolveDate = string.IsNullOrWhiteSpace(_task.ResolveDate) ? null : _task.ResolveDate.Trim();
+        _task.Note = string.IsNullOrWhiteSpace(_task.Note) ? null : _task.Note.Trim();
+
+        try
+        {
+            if (IsNew)
+            {
+                await TaskService.AddAsync(_task);
+            }
+            else
+            {
+                await TaskService.UpdateAsync(_task);
+            }
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            _error = $"保存失败：{ex.Message}";
+        }
+    }
+
+    private void OnDocSelected(InputFileChangeEventArgs e)
+    {
+        _docFile = e.File;
+        if (string.IsNullOrWhiteSpace(_docTitle))
+            _docTitle = Path.GetFileNameWithoutExtension(_docFile.Name);
+    }
+
+    private async Task UploadDocAsync()
+    {
+        if (_docFile is null) return;
+        _uploadingDoc = true;
+        try
+        {
+            await using var stream = _docFile.OpenReadStream(DocumentService.MaxFileSize);
+            var upload = new DocumentUpload
+            {
+                Category = _docCategory,
+                Title = string.IsNullOrWhiteSpace(_docTitle) ? _docFile.Name : _docTitle,
+                Note = _docNote,
+                OriginalFileName = _docFile.Name,
+                ContentType = _docFile.ContentType,
+                FileSize = _docFile.Size,
+            };
+            await DocumentService.UploadForTaskAsync(Id!.Value, upload, stream);
+            _docTitle = "";
+            _docCategory = "任务附件";
+            _docNote = null;
+            _docFile = null;
+            _attachments = await DocumentService.GetByTaskAsync(Id!.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = $"上传附件失败：{ex.Message}";
+        }
+        finally
+        {
+            _uploadingDoc = false;
+        }
+    }
+
+    private async Task DeleteDocAsync(int docId)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "确定删除该附件？");
+        if (!ok) return;
+        try
+        {
+            await DocumentService.SoftDeleteAsync(docId);
+            _attachments = await DocumentService.GetByTaskAsync(Id!.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = $"删除附件失败：{ex.Message}";
+        }
+    }
+}

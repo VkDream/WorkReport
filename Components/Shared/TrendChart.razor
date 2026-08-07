@@ -1,0 +1,29 @@
+@inject IJSRuntime JS
+
+<div class="card-panel">
+    <div class="card-panel-header">
+        <h2 class="card-panel-title">📈 月度趋势</h2>
+    </div>
+    <div class="card-panel-body" style="position: relative; height: 260px;">
+        <canvas id="trend-chart"></canvas>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<PeriodStats> Data { get; set; } = [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Data.Count > 0)
+        {
+            await JS.InvokeVoidAsync("drawTrendChart", new
+            {
+                labels = Data.Select(d => d.Period).ToList(),
+                ok = Data.Select(d => d.Ok).ToList(),
+                ng = Data.Select(d => d.Ng).ToList(),
+                pending = Data.Select(d => d.Pending).ToList(),
+                empty = Data.Select(d => d.Empty).ToList()
+            });
+        }
+    }
+}

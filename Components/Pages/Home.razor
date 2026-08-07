@@ -1,0 +1,379 @@
+@implements IDisposable
+
+@page "/"
+@attribute [Authorize]
+@inject TaskService TaskService
+@inject DocumentService DocumentService
+
+<PageTitle>工作汇报 - @_period</PageTitle>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert-banner">
+        <span class="alert-icon">⚠️</span>
+        <span class="alert-text">@_error</span>
+        <button class="alert-dismiss" @onclick="() => _error = null">✕</button>
+    </div>
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">@PageHeading</h1>
+        <p class="page-subtitle">@PageSubtitle</p>
+    </div>
+    <div class="page-actions">
+        <select class="form-select w-auto" @bind="_period" @bind:after="LoadTasksAsync">
+            @foreach (var p in _periods)
+            {
+                <option value="@p">@p</option>
+            }
+        </select>
+        <a class="btn btn-primary text-nowrap" href="/task/new?period=@Uri.EscapeDataString(_period)">新增任务</a>
+        @if (!IsHistoryPeriod)
+        {
+            <button class="btn btn-outline-primary text-nowrap" @onclick="CopyUnfinishedAsync" disabled="@_copyingUnfinished">
+                @(_copyingUnfinished ? "复制中..." : "继承上期未完成")
+            </button>
+        }
+        <a class="btn btn-ghost text-nowrap" href="/api/export?period=@Uri.EscapeDataString(_period)" target="_blank">📥 导出 Excel</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_copyMsg))
+{
+    <div class="alert-banner" style="background:#ECFDF5;border-color:#A7F3D0;color:#065F46">
+        <span class="alert-icon">✅</span>
+        <span class="alert-text">@_copyMsg</span>
+        <button class="alert-dismiss" @onclick="() => _copyMsg = null">✕</button>
+    </div>
+}
+
+@if (_tasks is null)
+{
+    <div class="loading-state">
+        <div class="spinner"></div>
+        <span>加载中...</span>
+    </div>
+}
+else
+{
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-label">任务总数</div>
+            <div class="stat-value">@_tasks.Count</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">已完成</div>
+            <div class="stat-value success">@_tasks.Count(t => t.Result is "完成")</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">正在进行中</div>
+            <div class="stat-value warning">@_tasks.Count(t => t.Result is "正在进行中")</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">待测</div>
+            <div class="stat-value muted">@_tasks.Count(t => t.Result is "待测" or "待确认")</div>
+        </div>
+    </div>
+
+    @foreach (var type in TaskTypes.All)
+    {
+        var items = _tasks.Where(t => t.Type == type).ToList();
+        <section class="card-panel">
+            <div class="card-panel-header">
+                <h2 class="card-panel-title">@type <span class="badge-count">@items.Count</span></h2>
+            </div>
+            @if (items.Count == 0)
+            {
+                <div class="empty-state">
+                    <div class="icon">📋</div>
+                    <div class="text">暂无记录</div>
+                </div>
+            }
+            else
+            {
+                <div style="overflow-x: auto">
+                    <table class="table-modern">
+                        <thead>
+                            <tr>
+                                <th style="width: 3.5rem">#</th>
+                                <th>工作说明</th>
+                                <th style="width: 7rem">完成效果</th>
+                                <th style="width: 8rem">解决时间</th>
+                                <th>备注说明</th>
+                                <th style="width: 11rem">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (task, index) in items.Select((t, i) => (t, i)))
+                            {
+                                <tr>
+                                    <td class="col-index">@(index + 1)</td>
+                                    <td>
+                                        <button type="button" class="task-title-button" @onclick="() => OpenDetailsAsync(task)">
+                                            @task.Title
+                                        </button>
+                                    </td>
+                                    <td>
+                                        <ResultBadge Result="@task.Result" />
+                                    </td>
+                                    <td class="col-secondary">@task.ResolveDate</td>
+                                    <td class="col-secondary">@task.Note</td>
+                                    <td>
+                                        <a class="btn-text btn-text-edit" href="/task/edit/@task.Id">编辑</a>
+                                        <a class="btn-text btn-text-copy" href="/task/new?copy=@task.Id">复制</a>
+                                        <form method="post" action="/api/tasks/delete-form" style="display:inline" onsubmit="return confirm('确定删除此项？')" data-enhance="false">
+                                            <input type="hidden" name="id" value="@task.Id" />
+                                            <button type="submit" class="btn-text btn-text-danger">删除</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+}
+
+@if (_detailTask is not null)
+{
+    <div class="modal-overlay task-detail-overlay" @onclick="CloseDetails">
+        <div class="modal-dialog task-detail-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header-custom task-detail-header">
+                <div class="task-detail-heading">
+                    <h3 class="modal-title-custom">@_detailTask.Title</h3>
+                    <div class="task-detail-subtitle">
+                        <span>@_detailTask.Period</span>
+                        <span>@_detailTask.Type</span>
+                    </div>
+                </div>
+                <button type="button" class="task-detail-close" @onclick="CloseDetails" aria-label="关闭">✕</button>
+            </div>
+
+            <div class="modal-body-custom task-detail-body">
+                <div class="task-detail-grid">
+                    <div class="task-detail-field">
+                        <div class="task-detail-label">完成效果</div>
+                        <div class="task-detail-value">
+                            <ResultBadge Result="@_detailTask.Result" />
+                        </div>
+                    </div>
+                    <div class="task-detail-field">
+                        <div class="task-detail-label">解决时间</div>
+                        <div class="task-detail-value">@DisplayValue(_detailTask.ResolveDate)</div>
+                    </div>
+                    <div class="task-detail-field">
+                        <div class="task-detail-label">创建时间</div>
+                        <div class="task-detail-value">@_detailTask.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                    <div class="task-detail-field">
+                        <div class="task-detail-label">更新时间</div>
+                        <div class="task-detail-value">@_detailTask.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                </div>
+
+                <div class="task-detail-section">
+                    <div class="task-detail-label">备注说明</div>
+                    <div class="task-detail-note">@DisplayValue(_detailTask.Note)</div>
+                </div>
+
+                <div class="task-detail-section">
+                    <div class="task-detail-label">任务附件</div>
+                    @if (_detailLoading)
+                    {
+                        <div class="task-detail-empty">加载中...</div>
+                    }
+                    else if (!string.IsNullOrEmpty(_detailError))
+                    {
+                        <div class="task-detail-error">@_detailError</div>
+                    }
+                    else if (_detailDocuments.Count == 0)
+                    {
+                        <div class="task-detail-empty">暂无附件</div>
+                    }
+                    else
+                    {
+                        <div class="task-detail-doc-list">
+                            @foreach (var doc in _detailDocuments)
+                            {
+                                <div class="task-detail-doc-item">
+                                    <div class="task-detail-doc-main">
+                                        <div class="task-detail-doc-title">@doc.Title</div>
+                                        <div class="task-detail-doc-meta">
+                                            @doc.OriginalFileName · @DocumentService.FormatFileSize(doc.FileSize) · @doc.CreatedAt.ToString("yyyy-MM-dd")
+                                        </div>
+                                    </div>
+                                    <div class="task-detail-doc-actions">
+                                        @if (DocumentService.CanOpenInBrowser(doc.OriginalFileName, doc.ContentType))
+                                        {
+                                            <a class="btn-text btn-text-edit" href="/api/documents/open/@doc.Id" target="_blank" rel="noopener" data-enhance-nav="false">打开</a>
+                                        }
+                                        <a class="btn-text btn-text-copy" href="/api/documents/download/@doc.Id" data-enhance-nav="false">下载</a>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    private const string HistoryPeriod = WorkReport.Services.TaskService.HistoryPeriod;
+
+    private string _period = string.Empty;
+    private List<string> _periods = [];
+    private List<WorkTask>? _tasks;
+    private string? _error;
+
+    private bool _copyingUnfinished;
+    private string? _copyMsg;
+    private WorkTask? _detailTask;
+    private List<DocumentListItem> _detailDocuments = [];
+    private bool _detailLoading;
+    private string? _detailError;
+    private CancellationTokenSource? _monitorCts;
+
+    private bool IsHistoryPeriod => _period == HistoryPeriod;
+    private string PageHeading => IsHistoryPeriod ? "历史项目" : "当前半月";
+    private string PageSubtitle => IsHistoryPeriod ? "已完成旧项目归档" : $"{_period} 的工作任务一览";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _period = TaskService.GetCurrentPeriod();
+            await RefreshPeriodsAndLoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"加载数据失败：{ex.Message}";
+            _tasks = [];
+        }
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return Task.CompletedTask;
+        // 启动一个 60 秒间隔的循环，检测半月期是否变更
+        _ = MonitorPeriodAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task MonitorPeriodAsync()
+    {
+        _monitorCts?.Cancel();
+        _monitorCts = new CancellationTokenSource();
+        var token = _monitorCts.Token;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(60_000, token);
+                await InvokeAsync(async () =>
+                {
+                    var current = TaskService.GetCurrentPeriod();
+                    if (current != _period)
+                    {
+                        _period = current;
+                        await RefreshPeriodsAndLoadAsync();
+                        StateHasChanged();
+                    }
+                });
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        _monitorCts?.Cancel();
+        _monitorCts?.Dispose();
+    }
+
+    private async Task RefreshPeriodsAndLoadAsync()
+    {
+        _periods = await TaskService.GetPeriodsAsync();
+        if (!_periods.Contains(_period))
+            _periods.Insert(0, _period);
+        await LoadTasksAsync();
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        try
+        {
+            _error = null;
+            _tasks = await TaskService.GetTasksByPeriodAsync(_period);
+        }
+        catch (Exception ex)
+        {
+            _error = $"加载任务列表失败：{ex.Message}";
+            _tasks = [];
+        }
+    }
+
+    private async Task OpenDetailsAsync(WorkTask task)
+    {
+        _detailTask = task;
+        _detailDocuments = [];
+        _detailError = null;
+        _detailLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _detailDocuments = await DocumentService.GetByTaskAsync(task.Id);
+        }
+        catch (Exception ex)
+        {
+            _detailError = $"加载附件失败：{ex.Message}";
+        }
+        finally
+        {
+            _detailLoading = false;
+        }
+    }
+
+    private void CloseDetails()
+    {
+        _detailTask = null;
+        _detailDocuments = [];
+        _detailError = null;
+        _detailLoading = false;
+    }
+
+    private static string DisplayValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "—" : value;
+    }
+
+    private async Task CopyUnfinishedAsync()
+    {
+        _copyingUnfinished = true;
+        _copyMsg = null;
+        StateHasChanged();
+
+        try
+        {
+            var count = await TaskService.CopyUnfinishedFromPreviousAsync(_period);
+            _copyMsg = count > 0
+                ? $"已继承上期 {count} 条未完成任务"
+                : "上期没有未完成的任务，或已全部继承";
+            await LoadTasksAsync();
+        }
+        catch (Exception ex)
+        {
+            _copyMsg = $"继承失败：{ex.Message}";
+        }
+        finally
+        {
+            _copyingUnfinished = false;
+        }
+    }
+}

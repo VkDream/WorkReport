@@ -1,0 +1,16 @@
+@using WorkReport.Services
+
+@if (string.IsNullOrEmpty(Result))
+{
+    <span class="result-empty">—</span>
+}
+else
+{
+    <span class="result-cell @TaskService.GetResultCss(Result)">@Result</span>
+}
+
+@code {
+    /// <summary>完成效果值：OK / NG / 待测 / 复判OK / 空 等</summary>
+    [Parameter]
+    public string? Result { get; set; }
+}

@@ -1,0 +1,256 @@
+@page "/profile"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject AuthService Auth
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
+
+<div class="profile-page">
+    <h2 class="mb-4">个人信息设置</h2>
+
+    @if (_mustChangePwd)
+    {
+        <div class="alert-banner" style="background:#FFFBEB;border-color:#F59E0B;color:#92400E;margin-bottom:16px">
+            <span class="alert-icon">⚠️</span>
+            <span class="alert-text">您使用的是默认密码，请立即修改后再继续使用系统</span>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="spinner"></div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <!-- 头像区域 -->
+            <div class="col-md-4">
+                <div class="profile-card">
+                    <h5>头像</h5>
+                    <div class="avatar-section">
+                        <label class="avatar-preview">
+                            @if (!string.IsNullOrEmpty(_avatarBase64))
+                            {
+                                <img src="@_avatarBase64" alt="头像" />
+                            }
+                            else
+                            {
+                                <span class="avatar-placeholder">📷</span>
+                            }
+                            <InputFile OnChange="OnAvatarSelected" accept="image/*" class="d-none" />
+                        </label>
+                        <p class="text-muted small mt-2">点击头像区域上传图片<br/>支持 JPG / PNG，最大 500KB</p>
+                        @if (!string.IsNullOrEmpty(_avatarBase64))
+                        {
+                            <button class="btn btn-sm btn-outline-danger mt-1" @onclick="RemoveAvatar">移除头像</button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- 资料区域 -->
+            <div class="col-md-8">
+                <div class="profile-card">
+                    <h5>基本资料</h5>
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" value="@_username" disabled />
+                        <div class="form-text">用户名不可修改</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">显示名称</label>
+                        <input type="text" class="form-control" @bind="_displayName" placeholder="例如：张三" />
+                        <div class="form-text">显示在导出的汇报人位置</div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">部门</label>
+                        <input type="text" class="form-control" @bind="_department" placeholder="例如：工程部 / 生产部" />
+                    </div>
+                    <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+                        @(_saving ? "保存中..." : "保存设置")
+                    </button>
+                    @if (!string.IsNullOrEmpty(_message))
+                    {
+                        <span class="ms-3 @(_success ? "text-success" : "text-danger")">@_message</span>
+                    }
+                </div>
+            </div>
+
+            <!-- 修改密码 -->
+            <div class="col-12">
+                <div class="profile-card">
+                    <h5>修改密码</h5>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">旧密码</label>
+                            <input type="password" class="form-control" @bind="_oldPassword" placeholder="请输入旧密码" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">新密码</label>
+                            <input type="password" class="form-control" @bind="_newPassword" placeholder="至少 4 个字符" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">确认新密码</label>
+                            <input type="password" class="form-control" @bind="_confirmPassword" placeholder="再次输入新密码" />
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary mt-3" @onclick="ChangePasswordAsync" disabled="@_changingPwd">
+                        @(_changingPwd ? "修改中..." : "修改密码")
+                    </button>
+                    @if (!string.IsNullOrEmpty(_pwdMsg))
+                    {
+                        <span class="ms-3 @(_pwdOk ? "text-success" : "text-danger")">@_pwdMsg</span>
+                    }
+                </div>
+            </div>
+
+            <!-- 数据管理 -->
+            <div class="col-12">
+                <div class="profile-card">
+                    <h5>数据管理</h5>
+                    <p class="text-muted small">换电脑时使用：下载数据库备份文件，在新电脑上传恢复即可。</p>
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-outline-secondary" href="/api/backup/download">
+                            ⬇️ 下载备份
+                        </a>
+                        <form method="post" enctype="multipart/form-data" action="/api/backup/restore" style="display:inline" data-enhance="false">
+                            <label class="btn btn-outline-warning mb-0" style="cursor:pointer">
+                                ⬆️ 恢复备份
+                                <input type="file" name="file" accept=".db" class="d-none" onchange="if(confirm('恢复将覆盖当前所有数据，确定继续？')) this.form.submit()" />
+                            </label>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+.profile-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.avatar-section { text-align: center; }
+.avatar-preview {
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    border: 3px dashed #cbd5e1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    margin: 0 auto;
+    overflow: hidden;
+    background: #f8fafc;
+    transition: border-color .2s;
+}
+.avatar-preview:hover { border-color: var(--primary); }
+.avatar-preview img {
+    width: 100%; height: 100%; object-fit: cover;
+}
+.avatar-placeholder {
+    font-size: 40px; opacity: .5;
+}
+</style>
+
+@code {
+    private string _username = "";
+    private string? _displayName;
+    private string? _department;
+    private string? _avatarBase64;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _message;
+    private bool _success;
+    private string _oldPassword = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+    private bool _changingPwd;
+    private string? _pwdMsg;
+    private bool _pwdOk;
+    private bool _mustChangePwd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        _username = state.User.Identity?.Name ?? "";
+        var user = await Auth.GetUserAsync(_username);
+        if (user is not null)
+        {
+            _displayName = user.DisplayName;
+            _department = user.Department;
+            _avatarBase64 = user.AvatarBase64;
+            _mustChangePwd = user.MustChangePassword;
+        }
+        _loading = false;
+    }
+
+    private async Task OnAvatarSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null || file.Size == 0) return;
+
+        if (file.Size > 500 * 1024)
+        {
+            _message = "图片大小不能超过 500KB";
+            _success = false;
+            return;
+        }
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (ext is not ".jpg" and not ".jpeg" and not ".png")
+        {
+            _message = "仅支持 JPG / PNG 格式";
+            _success = false;
+            return;
+        }
+
+        var mime = ext == ".png" ? "image/png" : "image/jpeg";
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(maxAllowedSize: 500 * 1024).CopyToAsync(ms);
+        _avatarBase64 = $"data:{mime};base64,{Convert.ToBase64String(ms.ToArray())}";
+        _message = null;
+    }
+
+    private void RemoveAvatar()
+    {
+        _avatarBase64 = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        StateHasChanged();
+
+        var ok = await Auth.UpdateProfileAsync(_username, _displayName, _department, _avatarBase64);
+        _success = ok;
+        _message = ok ? "保存成功！" : "保存失败，请重试";
+        _saving = false;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        _pwdMsg = null;
+        if (string.IsNullOrWhiteSpace(_oldPassword))
+        {
+            _pwdMsg = "请输入旧密码"; _pwdOk = false; return;
+        }
+        if (string.IsNullOrWhiteSpace(_newPassword) || _newPassword.Length < 4)
+        {
+            _pwdMsg = "新密码至少 4 个字符"; _pwdOk = false; return;
+        }
+        if (_newPassword != _confirmPassword)
+        {
+            _pwdMsg = "两次输入的新密码不一致"; _pwdOk = false; return;
+        }
+
+        _changingPwd = true; StateHasChanged();
+        var (ok, msg) = await Auth.ChangePasswordAsync(_username, _oldPassword, _newPassword);
+        _pwdOk = ok; _pwdMsg = msg;
+        _changingPwd = false;
+        if (ok) { _oldPassword = ""; _newPassword = ""; _confirmPassword = ""; _mustChangePwd = false; }
+    }
+
+}

@@ -1,0 +1,285 @@
+@page "/documents"
+@attribute [Authorize]
+@inject DocumentService DocumentService
+@inject IJSRuntime JS
+
+<PageTitle>文档库</PageTitle>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert-banner" style="@_messageStyle">
+        <span class="alert-icon">@_messageIcon</span>
+        <span class="alert-text">@_message</span>
+        <button class="alert-dismiss" @onclick="ClearMessage">×</button>
+    </div>
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">文档库</h1>
+        <p class="page-subtitle">保存 MES、项目资料和常用说明文档</p>
+    </div>
+    <div class="page-actions">
+        <select class="form-select w-auto" @bind="_categoryFilter">
+            <option value="">全部分类</option>
+            @foreach (var category in _categories)
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+        <div class="search-box">
+            <span class="search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+                </svg>
+            </span>
+            <input class="form-control" placeholder="搜索标题 / 文件名 / 备注" @bind="_keyword" @bind:event="oninput" />
+        </div>
+        <button type="button" class="btn btn-ghost text-nowrap" @onclick="LoadAsync">查询</button>
+    </div>
+</div>
+
+<section class="card-panel mb-4">
+    <div class="card-panel-header">
+        <h2 class="card-panel-title">上传文档</h2>
+    </div>
+    <div class="card-panel-body">
+        <div class="row g-3">
+            <div class="col-sm-4">
+                <label class="form-label">分类</label>
+                <input class="form-control" placeholder="例如 MES / 项目A / 供应商" @bind="_form.Category" />
+            </div>
+            <div class="col-sm-8">
+                <label class="form-label">标题</label>
+                <input class="form-control" placeholder="文档标题" @bind="_form.Title" />
+            </div>
+            <div class="col-12">
+                <label class="form-label">备注</label>
+                <textarea class="form-control" rows="2" placeholder="可选，补充说明这个文档的用途" @bind="_form.Note"></textarea>
+            </div>
+            <div class="col-lg-8">
+                <label class="form-label">文件</label>
+                <InputFile @key="_fileInputKey" class="form-control" OnChange="OnFileSelected" />
+                <div class="text-muted small mt-1">支持 @DocumentService.AllowedExtensionText，单个文件不超过 @DocumentService.FormatFileSize(DocumentService.MaxFileSize)</div>
+            </div>
+            <div class="col-lg-4 d-flex align-items-end justify-content-lg-end">
+                <button type="button" class="btn btn-primary w-100" @onclick="UploadAsync" disabled="@_uploading">
+                    @(_uploading ? "上传中..." : "上传保存")
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@if (_loading)
+{
+    <div class="loading-state">
+        <div class="spinner"></div>
+        <span>加载中...</span>
+    </div>
+}
+else
+{
+    <section class="card-panel">
+        <div class="card-panel-header">
+            <h2 class="card-panel-title">文档列表 <span class="badge-count">@_documents.Count</span></h2>
+        </div>
+        @if (_documents.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="text">暂无文档</div>
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x: auto">
+                <table class="table-modern">
+                    <thead>
+                        <tr>
+                            <th style="width: 7rem">分类</th>
+                            <th>标题</th>
+                            <th>文件名</th>
+                            <th style="width: 7rem">大小</th>
+                            <th style="width: 8rem">来源</th>
+                            <th>备注</th>
+                            <th style="width: 10rem">上传时间</th>
+                            <th style="width: 8rem">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var doc in _documents)
+                        {
+                            <tr>
+                                <td class="col-secondary">@doc.Category</td>
+                                <td>@doc.Title</td>
+                                <td class="col-secondary">@doc.OriginalFileName</td>
+                                <td class="col-secondary">@DocumentService.FormatFileSize(doc.FileSize)</td>
+                                <td class="col-secondary small">
+                                    @if (doc.TaskId is null)
+                                    {
+                                        <span class="text-muted">公共文档</span>
+                                    }
+                                    else if (doc.TaskIsDeleted == true)
+                                    {
+                                        <span title="关联任务：@doc.TaskTitle / @doc.TaskPeriod">@doc.TaskTitle / @doc.TaskPeriod</span>
+                                        <span class="badge bg-warning text-dark ms-1" style="font-size:10px">回收站</span>
+                                    }
+                                    else
+                                    {
+                                        <a class="text-decoration-none" href="/task/edit/@doc.TaskId" title="查看任务">@doc.TaskTitle / @doc.TaskPeriod</a>
+                                    }
+                                </td>
+                                <td class="col-secondary">@doc.Note</td>
+                                <td class="col-secondary">@doc.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>
+                                    @if (DocumentService.CanOpenInBrowser(doc.OriginalFileName, doc.ContentType))
+                                    {
+                                        <a class="btn-text btn-text-edit" href="/api/documents/open/@doc.Id" target="_blank" rel="noopener" data-enhance-nav="false">打开</a>
+                                    }
+                                    <a class="btn-text btn-text-copy" href="/api/documents/download/@doc.Id" data-enhance-nav="false">下载</a>
+                                    <button type="button" class="btn-text btn-text-danger" @onclick="() => DeleteAsync(doc.Id, doc.Title)">删除</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    private readonly DocumentForm _form = new();
+    private List<DocumentListItem> _documents = [];
+    private List<string> _categories = [];
+    private IBrowserFile? _selectedFile;
+    private string _categoryFilter = string.Empty;
+    private string _keyword = string.Empty;
+    private string? _message;
+    private string _messageStyle = "";
+    private string _messageIcon = "!";
+    private bool _loading = true;
+    private bool _uploading;
+    private int _fileInputKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _loading = true;
+            _documents = await DocumentService.SearchAsync(_categoryFilter, _keyword);
+            _categories = await DocumentService.GetCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"加载文档失败：{ex.Message}");
+            _documents = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        if (string.IsNullOrWhiteSpace(_form.Title))
+        {
+            _form.Title = Path.GetFileNameWithoutExtension(_selectedFile.Name);
+        }
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_selectedFile is null)
+        {
+            ShowError("请选择要上传的文件");
+            return;
+        }
+
+        _uploading = true;
+        try
+        {
+            var upload = new DocumentUpload
+            {
+                Category = _form.Category,
+                Title = _form.Title,
+                Note = _form.Note,
+                OriginalFileName = _selectedFile.Name,
+                ContentType = _selectedFile.ContentType,
+                FileSize = _selectedFile.Size,
+            };
+
+            await using var stream = _selectedFile.OpenReadStream(DocumentService.MaxFileSize);
+            await DocumentService.UploadAsync(upload, stream);
+
+            _form.Category = "";
+            _form.Title = "";
+            _form.Note = "";
+            _selectedFile = null;
+            _fileInputKey++;
+            ShowSuccess("文档已保存");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"上传失败：{ex.Message}");
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task DeleteAsync(int id, string title)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"确定删除文档“{title}”吗？");
+        if (!ok)
+        {
+            return;
+        }
+
+        try
+        {
+            await DocumentService.SoftDeleteAsync(id);
+            ShowSuccess("文档已删除");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"删除失败：{ex.Message}");
+        }
+    }
+
+    private void ShowSuccess(string message)
+    {
+        _message = message;
+        _messageIcon = "✓";
+        _messageStyle = "background:#ECFDF5;border-color:#A7F3D0;color:#065F46";
+    }
+
+    private void ShowError(string message)
+    {
+        _message = message;
+        _messageIcon = "!";
+        _messageStyle = "";
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+    }
+
+    private class DocumentForm
+    {
+        public string? Category { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Note { get; set; }
+    }
+}

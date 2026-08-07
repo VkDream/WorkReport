@@ -1,0 +1,219 @@
+@page "/history"
+@attribute [Authorize]
+@inject TaskService TaskService
+@implements IDisposable
+
+<PageTitle>历史记录</PageTitle>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert-banner">
+        <span class="alert-icon">⚠️</span>
+        <span class="alert-text">@_error</span>
+        <button class="alert-dismiss" @onclick="() => _error = null">✕</button>
+    </div>
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">历史记录</h1>
+        <p class="page-subtitle">跨半月期查询全部工作任务</p>
+    </div>
+    <div class="page-actions">
+        <select class="form-select w-auto" @bind="_period" @bind:after="OnFilterChanged">
+            <option value="">全部半月期</option>
+            @foreach (var p in _periods)
+            {
+                <option value="@p">@p</option>
+            }
+        </select>
+        <div class="search-box">
+            <span class="search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+                </svg>
+            </span>
+            <input class="form-control" placeholder="搜索工作说明 / 备注"
+                   value="@_keyword"
+                   @oninput="OnKeywordInput" />
+        </div>
+        <a class="btn btn-ghost text-nowrap" href="@ExportUrl" target="_blank">📥 导出当前结果</a>
+    </div>
+</div>
+
+@if (_chartData.Count > 0)
+{
+    <TrendChart Data="_chartData" />
+}
+
+@if (_tasks is null)
+{
+    <div class="loading-state">
+        <div class="spinner"></div>
+        <span>加载中...</span>
+    </div>
+}
+else
+{
+    <section class="card-panel">
+        <div class="card-panel-header">
+            <h2 class="card-panel-title">查询结果 <span class="badge-count">@_totalCount</span></h2>
+        </div>
+        @if (_tasks.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="icon">🔍</div>
+                <div class="text">没有符合条件的记录</div>
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x: auto">
+                <table class="table-modern">
+                    <thead>
+                        <tr>
+                            <th style="width: 11rem">半月期</th>
+                            <th style="width: 6.5rem">类型</th>
+                            <th>工作说明</th>
+                            <th style="width: 7rem">完成效果</th>
+                            <th style="width: 8rem">解决时间</th>
+                            <th>备注说明</th>
+                            <th style="width: 5rem">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var task in _tasks)
+                        {
+                            <tr>
+                                <td class="col-secondary">@task.Period</td>
+                                <td class="col-secondary">@task.Type</td>
+                                <td>@task.Title</td>
+                                <td>
+                                    <ResultBadge Result="@task.Result" />
+                                </td>
+                                <td class="col-secondary">@task.ResolveDate</td>
+                                <td class="col-secondary">@task.Note</td>
+                                <td>
+                                    <a class="btn-text btn-text-edit" href="/task/edit/@task.Id">编辑</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_totalPages > 1)
+            {
+                <div class="pagination-bar">
+                    <span>共 @_totalCount 条，第 @_currentPage / @_totalPages 页</span>
+                    <div class="pagination-btns">
+                        <button disabled="@(_currentPage <= 1)" @onclick="() => GoToPageAsync(1)">首页</button>
+                        <button disabled="@(_currentPage <= 1)" @onclick="() => GoToPageAsync(_currentPage - 1)">上一页</button>
+                        @foreach (var p in GetPageNumbers())
+                        {
+                            <button class="@(p == _currentPage ? "active" : null)"
+                                    @onclick="() => GoToPageAsync(p)">@p</button>
+                        }
+                        <button disabled="@(_currentPage >= _totalPages)" @onclick="() => GoToPageAsync(_currentPage + 1)">下一页</button>
+                        <button disabled="@(_currentPage >= _totalPages)" @onclick="() => GoToPageAsync(_totalPages)">末页</button>
+                    </div>
+                </div>
+            }
+        }
+    </section>
+}
+
+@code {
+    private string _period = string.Empty;
+    private string _keyword = string.Empty;
+    private List<string> _periods = [];
+    private List<WorkTask>? _tasks;
+    private string? _error;
+    private List<PeriodStats> _chartData = [];
+
+    private int _currentPage = 1;
+    private int _pageSize = 20;
+    private int _totalCount;
+    private int _totalPages => Math.Max(1, (int)Math.Ceiling((double)_totalCount / _pageSize));
+
+    private string ExportUrl => $"/api/export?period={Uri.EscapeDataString(_period)}&keyword={Uri.EscapeDataString(_keyword)}";
+
+    private Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _periods = await TaskService.GetPeriodsAsync();
+            _chartData = await TaskService.GetStatsAsync();
+            await SearchAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"加载数据失败：{ex.Message}";
+            _tasks = [];
+        }
+    }
+
+    private void OnKeywordInput(ChangeEventArgs e)
+    {
+        _keyword = e.Value?.ToString() ?? string.Empty;
+        // 300ms 防抖
+        _debounceTimer?.Dispose();
+        _debounceTimer = new Timer(async _ =>
+        {
+            _debounceTimer?.Dispose();
+            await InvokeAsync(OnFilterChanged);
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task OnFilterChanged()
+    {
+        _currentPage = 1;
+        await SearchAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _currentPage = page;
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        try
+        {
+            _error = null;
+            _tasks = await TaskService.SearchAsync(_period, _keyword, _currentPage, _pageSize);
+            _totalCount = await TaskService.SearchCountAsync(_period, _keyword);
+        }
+        catch (Exception ex)
+        {
+            _error = $"搜索失败：{ex.Message}";
+            _tasks = [];
+            _totalCount = 0;
+        }
+    }
+
+    /// <summary>生成分页按钮显示的页码列表（最多显示 7 个页码）。</summary>
+    private IEnumerable<int> GetPageNumbers()
+    {
+        if (_totalPages <= 7)
+        {
+            return Enumerable.Range(1, _totalPages);
+        }
+        var pages = new List<int> { 1, _totalPages };
+        var start = Math.Max(2, _currentPage - 1);
+        var end = Math.Min(_totalPages - 1, _currentPage + 1);
+        for (var i = start; i <= end; i++)
+        {
+            pages.Add(i);
+        }
+        pages.Sort();
+        return pages.Distinct();
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+}

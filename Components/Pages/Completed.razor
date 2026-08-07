@@ -1,0 +1,363 @@
+@page "/completed"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject TaskService TaskSvc
+@inject DocumentService DocumentService
+
+<h2 class="mb-4">已完成汇总</h2>
+
+@if (_loading)
+{
+    <div class="spinner"></div>
+}
+else
+{
+    <!-- 筛选 -->
+    <div class="filter-bar">
+        <div class="btn-group" role="group">
+            <button class="btn @(_showAll ? "btn-outline-primary" : "btn-primary") btn-sm"
+                    @onclick="() => ToggleFilter(false)">仅已完成</button>
+            <button class="btn @(_showAll ? "btn-primary" : "btn-outline-primary") btn-sm"
+                    @onclick="() => ToggleFilter(true)">全部任务</button>
+        </div>
+        <select class="form-select form-select-sm period-select" @bind="_selectedPeriod" @bind:after="LoadAsync">
+            <option value="">所有期数</option>
+            @foreach (var p in _periods)
+            {
+                <option value="@p">@p</option>
+            }
+        </select>
+
+        <div class="search-box completed-search">
+            <span class="search-icon">⌕</span>
+            <input class="form-control form-control-sm"
+                   placeholder="搜索客户、版本或任务"
+                   @bind="_keyword"
+                   @bind:event="oninput" />
+        </div>
+
+        <span class="text-muted filter-summary">共 @FilteredGroups.Count 项</span>
+    </div>
+
+    <!-- 合并列表 -->
+    <div class="table-responsive completed-table-wrap mt-3">
+        <table class="table completed-table">
+            <thead>
+                <tr>
+                    <th class="index-col">#</th>
+                    <th class="title-col">工作说明</th>
+                    <th class="type-col">类型</th>
+                    <th class="period-col">最近时间</th>
+                    <th class="result-col">完成效果</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    int idx = 1;
+                }
+                @foreach (var g in FilteredGroups)
+                {
+                    <tr>
+                        <td class="text-center text-muted">@(idx++)</td>
+                        <td class="title-cell">
+                            <button type="button" class="task-title completed-title-button" @onclick="() => OpenDetailsAsync(g)">
+                                @g.Title
+                            </button>
+                        </td>
+                        <td class="text-center type-cell">
+                            <span class="type-badge @(g.PrimaryType == "重点工作" ? "type-key" : "type-daily")">@g.PrimaryType</span>
+                        </td>
+                        <td class="text-center text-muted small period-cell">@g.LatestPeriod</td>
+                        <td class="text-center result-cell-wrap">
+                            <span class="result-badge @GetResultCss(g.PrimaryResult)">@(g.PrimaryResult ?? "—")</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (FilteredGroups.Count == 0)
+    {
+        <div class="empty-state">暂无数据</div>
+    }
+}
+
+@if (_detailGroup is not null)
+{
+    <div class="modal-overlay task-detail-overlay" @onclick="CloseDetails">
+        <div class="modal-dialog task-detail-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header-custom task-detail-header">
+                <div class="task-detail-heading">
+                    <h3 class="modal-title-custom">@_detailGroup.Title</h3>
+                    <div class="task-detail-subtitle">
+                        <span>@_detailGroup.LatestPeriod</span>
+                        <span>@_detailGroup.PrimaryType</span>
+                        @if (_detailGroup.TotalCount > 1)
+                        {
+                            <span>合并 @_detailGroup.TotalCount 条</span>
+                        }
+                    </div>
+                </div>
+                <button type="button" class="task-detail-close" @onclick="CloseDetails" aria-label="关闭">✕</button>
+            </div>
+
+            <div class="modal-body-custom task-detail-body">
+                <div class="task-detail-grid">
+                    <div class="task-detail-field">
+                        <div class="task-detail-label">完成效果</div>
+                        <div class="task-detail-value">
+                            <span class="result-badge @GetResultCss(_detailGroup.PrimaryResult)">@(_detailGroup.PrimaryResult ?? "—")</span>
+                        </div>
+                    </div>
+                    <div class="task-detail-field">
+                        <div class="task-detail-label">最近时间</div>
+                        <div class="task-detail-value">@_detailGroup.LatestPeriod</div>
+                    </div>
+                </div>
+
+                <div class="task-detail-section">
+                    <div class="task-detail-label">对应文件</div>
+                    @if (_detailLoading)
+                    {
+                        <div class="task-detail-empty">加载中...</div>
+                    }
+                    else if (!string.IsNullOrEmpty(_detailError))
+                    {
+                        <div class="task-detail-error">@_detailError</div>
+                    }
+                    else if (_detailDocuments.Count == 0)
+                    {
+                        <div class="task-detail-empty">暂无对应文件</div>
+                    }
+                    else
+                    {
+                        <div class="task-detail-doc-list">
+                            @foreach (var doc in _detailDocuments)
+                            {
+                                <div class="task-detail-doc-item">
+                                    <div class="task-detail-doc-main">
+                                        <div class="task-detail-doc-title">@doc.Title</div>
+                                        <div class="task-detail-doc-meta">
+                                            @doc.OriginalFileName · @DocumentService.FormatFileSize(doc.FileSize)
+                                        </div>
+                                    </div>
+                                    <div class="task-detail-doc-actions">
+                                        @if (DocumentService.CanOpenInBrowser(doc.OriginalFileName, doc.ContentType))
+                                        {
+                                            <a class="btn-text btn-text-edit" href="/api/documents/open/@doc.Id" target="_blank" rel="noopener" data-enhance-nav="false">打开</a>
+                                        }
+                                        <a class="btn-text btn-text-copy" href="/api/documents/download/@doc.Id" data-enhance-nav="false">下载</a>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.filter-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+    background: white; padding: 12px 16px;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    margin-bottom: 16px;
+    overflow-x: auto;
+}
+.filter-bar .filter-summary {
+    font-size: 13px; margin-left: auto; white-space: nowrap;
+}
+.period-select {
+    width: 160px;
+    flex: 0 0 160px;
+}
+.completed-search {
+    width: min(420px, 42vw);
+    min-width: 260px;
+    flex: 0 1 420px;
+}
+.completed-search .form-control {
+    height: 34px;
+}
+.completed-table-wrap {
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.completed-table {
+    min-width: 1060px;
+    background: white; border-radius: 10px; overflow: hidden;
+    box-shadow: none;
+    table-layout: fixed;
+}
+.completed-table thead th {
+    background: #F1F5F9; color: #475569; font-weight: 600;
+    font-size: 13px; padding: 10px 12px;
+    border-bottom: 2px solid #3B82F6;
+    white-space: nowrap;
+}
+.completed-table td { padding: 10px 12px; vertical-align: middle; }
+.completed-table tbody tr { border-bottom: 1px solid #F1F5F9; }
+.completed-table .index-col { width: 50px; }
+.completed-table .title-col { width: 660px; }
+.completed-table .type-col { width: 130px; }
+.completed-table .period-col { width: 130px; }
+.completed-table .result-col { width: 90px; }
+.completed-table .title-cell,
+.completed-table .type-cell,
+.completed-table .period-cell,
+.completed-table .result-cell-wrap {
+    white-space: nowrap;
+}
+.completed-title-button {
+    border: 0;
+    background: transparent;
+    padding: 3px 6px;
+    margin: -3px -6px;
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.completed-title-button:hover {
+    color: #2563EB;
+    background: rgba(59, 130, 246, 0.08);
+}
+.completed-title-button:focus {
+    outline: none;
+}
+.completed-title-button:focus-visible {
+    color: #2563EB;
+    background: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+.task-title {
+    display: inline-block;
+    max-width: 100%;
+    font-weight: 500; color: #1E293B;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+.type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.type-key { background: #DBEAFE; color: #1D4ED8; }
+.type-daily { background: #EDE9FE; color: #6D28D9; }
+.result-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+    white-space: nowrap;
+}
+.completed-table tbody tr:hover { background: #F8FAFC; }
+.empty-state {
+    text-align: center; padding: 40px; color: #94A3B8;
+    background: white; border-radius: 10px; margin-top: 12px;
+}
+</style>
+
+@code {
+    private bool _loading = true;
+    private bool _showAll;
+    private string _selectedPeriod = "";
+    private string _keyword = "";
+    private List<string> _periods = new();
+    private List<CompletedGroup> _groups = new();
+    private CompletedGroup? _detailGroup;
+    private List<DocumentListItem> _detailDocuments = new();
+    private bool _detailLoading;
+    private string? _detailError;
+    private List<CompletedGroup> FilteredGroups => FilterGroups();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task ToggleFilter(bool showAll)
+    {
+        _showAll = showAll;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        _groups = await TaskSvc.GetCompletedGroupedAsync(_showAll,
+            string.IsNullOrWhiteSpace(_selectedPeriod) ? null : _selectedPeriod);
+
+        // Load periods for filter dropdown (only first time)
+        if (_periods.Count == 0)
+            _periods = await TaskSvc.GetPeriodsAsync();
+
+        _loading = false;
+    }
+
+    private string GetResultCss(string? result) => result switch
+    {
+        "完成" => "result-ok",
+        "正在进行中" => "result-ng",
+        "待测" or "待确认" => "result-pending",
+        _ => "result-empty"
+    };
+
+    private List<CompletedGroup> FilterGroups()
+    {
+        if (string.IsNullOrWhiteSpace(_keyword))
+            return _groups;
+
+        var keyword = _keyword.Trim();
+        return _groups
+            .Where(g =>
+                g.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                g.PrimaryType.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                (g.PrimaryResult?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                g.LatestPeriod.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task OpenDetailsAsync(CompletedGroup group)
+    {
+        _detailGroup = group;
+        _detailDocuments = new();
+        _detailError = null;
+        _detailLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _detailDocuments = await DocumentService.GetByTaskAsync(group.PrimaryTaskId);
+        }
+        catch (Exception ex)
+        {
+            _detailError = $"加载文件失败：{ex.Message}";
+        }
+        finally
+        {
+            _detailLoading = false;
+        }
+    }
+
+    private void CloseDetails()
+    {
+        _detailGroup = null;
+        _detailDocuments = new();
+        _detailError = null;
+        _detailLoading = false;
+    }
+}
